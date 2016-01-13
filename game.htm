@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>JavaScript Tile Map Scrolling</title> 
+    <style type="text/css">
+        body {
+            padding:0px;
+            margin:0px;           
+        }
+        .map {
+            position: absolute;
+            width: 1000px;
+            height: 800px;
+            border: 1px solid #fff;
+        }
+
+        .plauer {
+            position: absolute;
+            background: url(event1.png);
+            background-position: 0px 0px;
+            width: 30px;
+            height: 49px;
+            z-index: 1;
+            top: 244px;
+            left: 428px;
+        }
+
+        #level1 {
+            
+            z-index: 2;
+        }
+
+        #next {
+           position: absolute;
+            background: url(level1.png);
+            background-position: 64px 0px;
+            width: 61px;
+            height: 58px;
+            z-index: 1;
+            top: 0px;
+            left: 428px; 
+        }
+
+
+
+
+    </style> 
+    <script type="text/javascript" 
+    src="http://ajax.googleapis.com/ajax/libs/jquery/1.5.0/jquery.min.js">
+</script> 
+
+<script type="text/javascript">
+    $(function () {
+
+
+// One instance of tileScroller is required for each viewport.        
+var tileScroller = function (params) {
+
+    var that = {},
+    $viewport = params.$viewport,
+        // Calculate maximum number of tiles that can be displayed in viewport.
+        tilesAcross = Math.ceil(($viewport.innerWidth() + params.tileWidth) / params.tileWidth),
+        tilesDown = Math.ceil(($viewport.innerHeight() + params.tileHeight) / params.tileHeight),
+
+        // Create a handle element that all tiles will be attached to.
+        // If this element is moved, so all the attached tiles will move.
+        html = '<div class="handle" style="position:absolute;">',
+        left = 0,
+        top = 0,
+        // General counters.
+        tiles = [],
+        // Stores are reference to each tile's style property.
+        tileBackPos = [],
+        // Stores the background position offset for each tile bitmap.
+        mapWidthPixels = params.mapWidth * params.tileWidth,
+        mapHeightPixels = params.mapHeight * params.tileHeight,
+        handle, i; // General counter.
+
+    // Attach all the tiles to the handle. This is done by creating
+    // one big DOM string and attaching the in one jQuery call.
+    // This is faster than attaching each one individually.
+    for (top = 0; top < tilesDown; top++) {
+        for (left = 0; left < tilesAcross; left++) {
+            html += '<div class="tile" style="position:absolute;' +
+            'background-image:url(\'' + params.image + '\');' +
+            'width:' + params.tileWidth + 'px;' +
+            'height:' + params.tileHeight + 'px;' +
+            'background-position: 0px 0px;' +
+            'left:' + (left * params.tileWidth) + 'px;' +
+            'top:' + (top * params.tileHeight) + 'px;' + '"/>';
+        }
+    }
+    html += '</div>';
+    // Put the whole lot in the viewport.
+    $viewport.html(html);
+
+    // Get a reference to the handle DOM element.
+    handle = $('.handle', $viewport)[0];
+
+    // For each tile in the viewport, store a reference to its
+    // css style attribute for speed.
+    // This will be updated with the tile's visbility status
+    // when scrolling later on.
+    for (i = 0; i < tilesAcross * tilesDown; i++) {
+        tiles.push($('.tile', $viewport)[i].style);
+    }
+
+    // For each tile image in the large bitmap, calculate and store the
+    // the pixel offsets to be used for the tiles' background image.
+    // This is quicker than calculating when updating later.
+    tileBackPos.push('0px 0px'); // Tile zero - special 'hidden' tile.
+    for (top = 0; top < params.imageHeight; top += params.tileHeight) {
+        for (left = 0; left < params.imageWidth; left += params.tileWidth) {
+            tileBackPos.push(-left + 'px ' + -top + 'px');
+        }
+    }
+
+    // Useful public variables.
+    that.mapWidthPixels = mapWidthPixels;
+    that.mapHeightPixels = mapHeightPixels;
+
+// метод добовляет объект в указанные координаты
+that.draw = function (scrollX, scrollY) {
+        // If wrapping, transform start positions to valid positive
+        // positions within the dimensions of the map.
+        // This makes the wrapping code simpler later on.
+        var wrapX = params.wrapX,
+        wrapY = params.wrapY;
+        if (wrapX) {
+            scrollX = (scrollX % mapWidthPixels);
+            if (scrollX < 0) {
+                scrollX += mapWidthPixels;
+            }
+        }
+        if (wrapY) {
+            scrollY = (scrollY % mapHeightPixels);
+            if (scrollY < 0) {
+                scrollY += mapHeightPixels;
+            }
+        }
+
+        var xoff = -(scrollX % params.tileWidth),
+        yoff = -(scrollY % params.tileHeight);
+        // >> 0 alternative to math.floor. Number changes from a float to an int.
+        handle.style.left = (xoff >> 0) + 'px';
+        handle.style.top = (yoff >> 0) + 'px';
+
+        // Convert pixel scroll positions to tile units.
+        scrollX = (scrollX / params.tileWidth) >> 0;
+        scrollY = (scrollY / params.tileHeight) >> 0;
+
+
+        var map = params.map,
+            sx, sy = scrollY,               // Copies of scrollX & Y positions (tile units).
+            countAcross, countDown,         // Loop counts for tiles across and down viewport. 
+            mapWidth = params.mapWidth,     // Copy of map width (tile units). 
+            mapHeight = params.mapHeight,   // Copy of map height (tile units).
+            i,              // General counter.        
+            tileInView = 0, // Start with top left tile in viewport.
+            
+            tileIndex,      // Tile index number taken from map.
+            mapRow;
+        // Main drawing loop.
+        for (countDown = tilesDown; countDown; countDown--) {
+            // Wrap vertically?
+            if (wrapY) {
+                if (sy >= mapHeight) {
+                    sy -= mapHeight;
+                }
+            } else
+            // Otherwise clip vertically (just make the whole row blank)
+            if (sy < 0 || sy >= mapHeight) {
+                for (i = tilesW; i; i--) {
+                    tiles[tileInView++].visibility = 'hidden';
+                }
+                sy++;
+                continue;
+            }
+            // Draw a row.
+            sx = scrollX;
+            mapRow = sy * mapWidth;
+            for (countAcross = tilesAcross; countAcross; countAcross--) {
+                // Wrap horizontally?
+                if (wrapX) {
+                    if (sx >= mapWidth) {
+                        sx -= mapWidth;
+                    }
+                } else
+                // Or clipping horizontally?
+                if (sx < 0 || sx >= mapWidth) {
+                    tiles[tileInView++].visibility = 'hidden';
+                    sx++;
+                    continue;
+                }
+                // Get tile index no.
+                tileIndex = map[mapRow + sx];
+                sx++;
+                // If tile index non zero, then 'draw' it,
+                if (tileIndex) {
+                    tiles[tileInView].visibility = 'visible';
+                    tiles[tileInView++].backgroundPosition = tileBackPos[tileIndex];
+                }
+                // otherwise hide it. 
+                else {
+                    tiles[tileInView++].visibility = 'hidden';
+                }
+            }
+            sy++;
+        }
+    };
+    return that;
+};
+
+// функция загрузки карты в xml формате
+var loadMap = function(xmlFile,$viewports,callback) {
+    var tileScrollers = []; // Array of tileScroller instances for each viewport.
+    $.ajax({
+        type: "GET",
+        url: xmlFile,
+        dataType: "xml",
+        // Функция вызываеться когда вся карта будет загружена
+        success: function(xml) {
+            // Получить ссылки на изображение и картографической информации.
+            var $imageInfo = $(xml).find('image'), 
+            $mapInfo = $(xml).find('map'),
+            i;
+            // For each layer, create a tileScroller object.
+            $(xml).find('layer').each(function() {
+                // Setup parameters to pass to tileScroller.
+                // The + operator before some values is to ensure
+                // they are treated as numerics instead of strings.
+                var params = {
+                    tileWidth: +$mapInfo.attr('tilewidth'),
+                    tileHeight:+$mapInfo.attr('tileheight'),
+                    wrapX:true,
+                    wrapY:true,
+                    mapWidth:+$mapInfo.attr('width'),
+                    mapHeight:+$mapInfo.attr('height'),
+                    image:$imageInfo.attr('source'),
+                    imageWidth: +$imageInfo.attr('width'),
+                    imageHeight: +$imageInfo.attr('height')
+                },  
+                    // Get the actual map data as an array of strings.
+                    mapText = $(this).find('data').text().split(','),
+                    // Create a viewport.
+                    $viewport = $('<div>');
+                    $viewport.attr({
+                        'id':$(this).attr('name')
+                    }).css({
+                        'width':'100%',
+                        'height':'100%',
+                        'position':'absolute',
+                        'overflow':'hidden'
+                    });
+                // Attach viewport to viewports wrapper.
+                $viewports.append($viewport);
+                // Store viewport in parameters.
+                params.$viewport = $viewport;
+                // Create a map array and store in parameters.
+                params.map = [];
+                // Convert previous text array map into numeric array.
+                for(i=0;i<mapText.length;i++) {
+                    params.map.push(+mapText[i]);
+                }
+                // Create a tileScroller and save reference.
+                tileScrollers.push( tileScroller(params) );	
+            });
+            // Call callback when map loaded, passing array
+            // of tileScrollers as parameter.
+            callback(tileScrollers);
+        }
+    });
+};
+
+
+// функция обработки игрока
+
+function handler(e) {
+var kub = $(".plauer");
+var kub1 = $(".plauer").offset();
+
+        var KEY_CODE = {
+          LEFT: 37,
+          UP: 38,
+          RIGHT: 39,
+          DOWN: 40
+        };
+        
+//событие кнопок
+    switch(e.keyCode) {
+  case KEY_CODE.LEFT:
+  $(".plauer").css( "background-position", "0px -48px");
+    //console.log("налево");
+    //kub.css("left","-10px");
+    //console.log(kub1);
+    kub.offset(function(i, coord){
+        var  newCoord = {};
+        newCoord.left = coord.left - 10;
+        return newCoord;
+ });
+
+    
+  break;
+  case KEY_CODE.UP:
+  $(".plauer").css( "background-position", "0px 49px");
+    //console.log("вверх");
+    //kub.css("top","-10px");
+    //console.log(kub1);
+    kub.offset(function(i, coord){
+        var  newCoord = {};
+        newCoord.top = coord.top - 10;
+        return newCoord;
+ });
+    
+  break;
+  case KEY_CODE.RIGHT:
+    $(".plauer").css( "background-position", "0px 96px");
+    //console.log("направо");
+    //kub.css("left","10px");
+    //console.log(kub1);
+    kub.offset(function(i, coord){
+        var  newCoord = {};
+        newCoord.left = coord.left + 10;
+        return newCoord;
+ });
+    
+    
+  break;
+  case KEY_CODE.DOWN:
+  
+  $(".plauer").css( "background-position", "0px 0px");
+   //console.log("вниз");
+   //kub.css("top","10px");
+   //console.log(kub1);
+   
+   kub.offset(function(i, coord){
+        var  newCoord = {};
+        newCoord.top = coord.top + 10;
+        return newCoord;
+ });
+   
+  break;      
+  default:
+    console.log("другая кнопка");
+};
+        
+        
+};
+
+// инициализируем событие
+window.addEventListener('keydown', handler, false);
+window.addEventListener('keypress', handler, false);
+
+var box1 = document.getElementById("plauer");
+var box3 = document.getElementById("next");
+
+
+function rect2Rect(obj1, obj2) {
+       return ( obj1.offsetLeft <= obj2.offsetLeft + obj2.offsetWidth && obj1.offsetLeft + obj1.offsetWidth  >=  obj2.offsetLeft && obj1.offsetTop + obj1.offsetHeight >=  obj2.offsetTop && obj1.offsetTop <= obj2.offsetTop +  obj2.offsetHeight );
+    }
+
+    
+    
+    function move() {
+       if(!rect2Rect(box1, box3)) {
+         setTimeout(function() {    
+           move();
+         }, 50);
+       }
+       else{
+         alert("Загрузка уровня 2");
+         $('.map').empty().append('<div class="plauer" id="plauer"></div>');
+         loadMap("level2.tmx", $('.map'), function (tileScrollers) {
+
+        var ts11 = tileScrollers[0],  // Get the three tileScrollers.
+        ts21 = tileScrollers[1],
+            ts31 = tileScrollers[2],
+
+            viewWidth = $('.map').innerWidth(),
+            viewHeight = $('.map').innerHeight();
+
+            ts11.draw(0, 0);
+            ts21.draw(0, 0);
+            ts31.draw(0, 0);
+
+        });
+
+       }
+    }
+    move();
+
+
+/*Код игры*/
+
+
+// загружаем через ajax уровень и аппендим в .map 
+
+loadMap("level1.tmx", $('.map'), function (tileScrollers) {
+
+        var ts1 = tileScrollers[0],  // Get the three tileScrollers.
+        ts2 = tileScrollers[1],
+            ts3 = tileScrollers[2],
+
+            viewWidth = $('.map').innerWidth(),
+            viewHeight = $('.map').innerHeight();
+
+            ts1.draw(0, 0);
+            ts2.draw(0, 0);
+            ts3.draw(0, 0);
+
+        });
+
+
+});
+
+
+</script>
+
+</head>
+<body>
+    <!-- This div will contain the three viewports -->
+    <!-- <div id="viewports"></div>
+    <div id="viewports1"></div>
+    <div id="viewports2"></div>
+    <div id="viewports3"></div> -->
+    <div class="map">
+        <div class="plauer" id="plauer">
+
+        </div>
+
+        <div id="next"></div>
+    </div>
+</body>
+</html> 
